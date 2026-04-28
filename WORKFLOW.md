@@ -1,40 +1,99 @@
-# Workflow contract for Symphony agents
+---
+tracker:
+  kind: linear
+  project_slug: "rdp-bench-experiment-e2d36e4dca0e"
+  active_states:
+    - Todo
+    - In Progress
+  terminal_states:
+    - Done
+    - Cancelled
+    - Canceled
+    - Duplicate
+polling:
+  interval_ms: 30000
+workspace:
+  root: /home/bench/symphony-workspaces
+hooks:
+  after_create: |
+    set -e
+    git clone --depth 1 https://github.com/yzdong/grdp-symphony .
+    git config user.email "bench@example.com"
+    git config user.name "bench"
+agent:
+  max_concurrent_agents: 4
+  max_turns: 30
+codex:
+  command: codex --config 'shell_environment_policy.inherit=all' --config 'model="gpt-5"' app-server
+  approval_policy: never
+  thread_sandbox: workspace-write
+  turn_sandbox_policy:
+    type: workspaceWrite
+---
 
-This file lives at the root of the grdp fork and is read by Symphony for every
-issue. It defines the policy for autonomous coding-agent runs.
+You are working on Linear issue `{{ issue.identifier }}` for the rdp-bench experiment.
 
-## Goal of every run
+Issue context:
+Identifier: {{ issue.identifier }}
+Title: {{ issue.title }}
+Current status: {{ issue.state }}
+Labels: {{ issue.labels }}
+URL: {{ issue.url }}
 
-Implement the issue exactly as scoped. The issue title and body are
-self-contained — do not expand scope beyond what the acceptance criteria list.
+Description:
+{% if issue.description %}
+{{ issue.description }}
+{% else %}
+No description provided.
+{% endif %}
 
-## Allowed actions
+## Goal
 
-- Read any file in this repo.
-- Browse `xfreerdp` source on GitHub (`https://github.com/FreeRDP/FreeRDP`).
-- Browse Microsoft Open Specifications.
-- Build (`go build ./...`) and run tests (`go test ./...`).
-- Run the scenario suite at `/opt/bench/scenarios/lib/score.sh` to verify your
-  changes pass the relevant rubric checks.
+This is the symphony stack of an experiment comparing multi-agent orchestrators on
+making `nakagami/grdp` (a pure-Go RDP client) closer to feature parity with `xfreerdp`.
 
-## Disallowed actions
+The repo at `https://github.com/yzdong/grdp-symphony` is a working copy you may
+push branches to and open PRs against. Your job: implement the Linear issue's
+acceptance criteria.
 
-- Do not modify `/opt/bench/scenarios/` — that is the scoring rubric.
-- Do not push to upstream `nakagami/grdp`. Use this fork only.
-- Do not bypass the LiteLLM proxy (it is set as `OPENAI_BASE_URL`).
+## Constraints
+
+- Single language: Go.
+- Reference impl: you may consult `https://github.com/FreeRDP/FreeRDP` (Apache-2.0).
+  Idiomatic Go ports are fine; PRs that lift code must say so in the description.
+- License: GPL-3.0 (matches upstream grdp).
+- Do NOT push to upstream `nakagami/grdp`. Only this fork.
+- Do NOT modify `WORKFLOW.md` or any file under `.codex/` — those are workflow infra.
+- Hard cap: $500 OpenAI spend (enforced at the LiteLLM proxy at OPENAI_BASE_URL).
+- Hard cap: 24 hours wall-clock per the systemd unit.
+
+## Workflow
+
+When you start on an issue:
+
+1. Read the issue description carefully — it contains acceptance criteria,
+   scope, and links to MS-RDP* spec sections + xfreerdp source paths.
+2. If the issue depends on other issues (`blockedBy`/`relatedTo`), check
+   whether those have merged PRs; if not, comment on the issue and stop.
+3. Implement the acceptance criteria in a feature branch. Commit early and often.
+4. `go build ./...` and `go test ./...` must pass.
+5. Open a PR against `master` of this fork. Add a clear description.
+6. If CI fails, iterate.
+
+Move the issue to `In Progress` on entry, leave a `## Codex Workpad` comment
+with your plan and progress, and update it as you work. Move to `Done` only
+when the PR is merged.
 
 ## Definition of done
 
-A PR that:
-1. Closes the issue's acceptance criteria.
-2. Adds tests for the new code.
-3. Passes `go build ./...` and `go test ./...`.
-4. Does not regress any previously-passing scenario.
-5. Has a clear PR description: what changed, why, and (if ported from
-   xfreerdp) attribution.
+- All acceptance criteria from the issue checked off.
+- Tests added for the new code.
+- `go build ./...` and `go test ./...` pass on CI.
+- PR description is clear (what / why / any FreeRDP attribution).
+- The bench scenario suite (`/opt/bench/scenarios/lib/score.sh`) doesn't
+  regress on previously-passing scenarios.
 
 ## When stuck
 
-If the issue is blocked by a missing dependency that should be a separate
-issue, write a short PR comment naming the missing dependency and stop. Do not
-write the dependency yourself in this run — Symphony will route it.
+If blocked by a true external blocker (missing tool/auth that a human must
+resolve), comment on the issue and move it to `Cancelled`. Do not loop.
